@@ -1,0 +1,91 @@
+/* src/App.css */
+#root {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 2rem;
+    text-align: center;
+}
+
+.App {
+    font-family: sans-serif;
+}
+
+.App-header {
+    background-color: #282c34;
+    padding: 20px;
+    border-radius: 8px;
+    color: white;
+    min-height: 80vh;
+}
+
+button {
+    background-color: #1db954; /* Spotify green */
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    margin: 5px;
+    border-radius: 20px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+button:hover {
+    background-color: #1ed760;
+}
+
+button:disabled {
+    background-color: #555;
+    cursor: not-allowed;
+}
+
+.error {
+    color: #ff4d4d;
+    background-color: #442020;
+    padding: 10px;
+    border-radius: 5px;
+    margin-top: 15px;
+}
+
+.profile {
+    margin-top: 20px;
+    margin-bottom: 20px;
+}
+
+.profile-pic {
+    border-radius: 50%;
+    margin-top: 10px;
+}
+
+.controls {
+    margin-top: 20px;
+    margin-bottom: 30px;
+    border-top: 1px solid #444;
+    border-bottom: 1px solid #444;
+    padding-top: 20px;
+    padding-bottom: 20px;
+}
+
+.playlists {
+    margin-top: 20px;
+    text-align: left;
+}
+
+.playlists ul {
+    list-style: none;
+    padding: 0;
+}
+
+.playlists li {
+    background-color: #3a3f4a;
+    margin-bottom: 8px;
+    padding: 10px;
+    border-radius: 4px;
+}
+
+hr {
+    border: none;
+    border-top: 1px solid #444;
+    margin-top: 20px;
+    margin-bottom: 20px;
+}
