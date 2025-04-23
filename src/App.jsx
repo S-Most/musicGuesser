@@ -8,6 +8,7 @@ import {
     pausePlayback,
 } from "./spotifyApi";
 import "./App.css";
+// Useless comment
 
 function App() {
     const [token, setToken] = useState(
