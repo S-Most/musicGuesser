@@ -19,7 +19,7 @@ function App() {
     const [error, setError] = useState(null);
 
     const CLIENT_ID = import.meta.env.VITE_SPOTIFY_CLIENT_ID;
-    const REDIRECT_URI = "https://music-guesser-five.vercel.app/";
+    const REDIRECT_URI = "https://music-guesser-now.vercel.app/";
     const AUTH_ENDPOINT = "https://accounts.spotify.com/authorize";
     const RESPONSE_TYPE = "token";
 
