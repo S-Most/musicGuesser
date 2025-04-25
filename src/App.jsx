@@ -21,7 +21,7 @@ function App() {
     const CLIENT_ID = import.meta.env.VITE_SPOTIFY_CLIENT_ID;
     const REDIRECT_URI = "https://music-guesser-now.vercel.app/";
     const AUTH_ENDPOINT = "https://accounts.spotify.com/authorize";
-    const RESPONSE_TYPE = "token";
+    const RESPONSE_TYPE = "code";
 
     const SCOPES = [
         // "streaming", // Add if using Web Playback SDK later
