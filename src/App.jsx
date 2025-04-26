@@ -67,7 +67,7 @@ function App() {
         "user-modify-playback-state",
         // "streaming" // Add only if using the Web Playback SDK
     ];
-    const SCOPES_URL_PARAM = SCOPES.join("%20");
+    const SCOPES_URL_PARAM = SCOPES.join(" ");
 
     // --- PKCE Login ---
     const handleLogin = async () => {
