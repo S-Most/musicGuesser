@@ -1,11 +1,11 @@
 import React from 'react';
-import './PlayerTimeline.css';
 
 function PlayerTimeline({ player }) {
     return (
         <div className="player-timeline">
-            <h4>
-                {player.name} - Score: {player.score}
+            <h4 className="timeline-header">
+                <span className="timeline-player-name">{player.name}</span>
+                <span className="timeline-player-score">Score: {player.score}</span>
             </h4>
 
             <div className="timeline-entries-container">

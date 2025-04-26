@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { startPlayback, pausePlayback } from '../../spotifyApi';
-import "./GameScreen.css"
 
 const SNIPPET_DURATION_MS = 15000;
 const REPLAY_PENALTY = 1;
@@ -35,7 +34,7 @@ function GameScreen({ currentPlayer, currentSong, placementOptions, onSubmitGues
                 pauseTimeoutRef.current = null;
             }
         };
-    }, [currentSong]);
+    }, [currentSong, isSnippetPlaying]);
 
     const handlePlaySnippet = async () => {
         if (!currentSong || !currentSong.uri || isPlaybackLoading) return;
@@ -125,12 +124,11 @@ function GameScreen({ currentPlayer, currentSong, placementOptions, onSubmitGues
         });
     };
 
-    // Button text logic (remains the same)
     let playButtonText = 'Play Song Snippet';
     if (isSnippetPlaying) {
         playButtonText = 'Playing...';
     } else if (snippetPlayCount > 0) {
-        playButtonText = `Replay Snippet (-${REPLAY_PENALTY}pt)`;
+        playButtonText = `Continue playing (-${REPLAY_PENALTY}pt)`;
     }
 
     const isPlayButtonDisabled = !!feedback.message || isLoading || isPlaybackLoading || isSnippetPlaying || !currentSong?.uri;
@@ -140,13 +138,9 @@ function GameScreen({ currentPlayer, currentSong, placementOptions, onSubmitGues
         <section id="game-section">
             <div id="game-info">
                 <p>Current Turn: <strong>{currentPlayer.name}</strong></p>
-                <p>Score: <strong>{currentPlayer.score}</strong></p>
             </div>
 
             <div id="song-area">
-                 <p style={{ fontStyle: 'italic', color: '#aaa', marginBottom: '15px' }}>
-                    ℹ️ Click button below. Playback starts/resumes on your active Spotify device and pauses after {SNIPPET_DURATION_MS / 1000}s. Replaying costs points!
-                 </p>
                 {currentSong.uri ? (
                     <button onClick={handlePlaySnippet} disabled={isPlayButtonDisabled}>
                         {playButtonText}
