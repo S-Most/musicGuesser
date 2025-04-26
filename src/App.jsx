@@ -11,62 +11,52 @@ import {
 } from "./spotifyApi";
 import "./App.css";
 
-// --- PKCE Helper Functions ---
-// Helper function to generate a random string for the code verifier
 function generateRandomString(length) {
     let text = '';
-    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~'; // Added chars allowed by PKCE spec
+    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
     for (let i = 0; i < length; i++) {
         text += possible.charAt(Math.floor(Math.random() * possible.length));
     }
     return text;
 }
 
-// Helper function to generate the SHA256 hash (async)
 async function sha256(plain) {
     const encoder = new TextEncoder();
     const data = encoder.encode(plain);
     return window.crypto.subtle.digest('SHA-256', data);
 }
 
-// Helper function to base64url encode the hash
 function base64urlencode(a) {
-    // Convert the ArrayBuffer to string using Uint8Array
     let str = "";
     let bytes = new Uint8Array(a);
     let len = bytes.byteLength;
     for (let i = 0; i < len; i++) {
         str += String.fromCharCode(bytes[i]);
     }
-    // Use btoa for Base64 encoding, then make it URL-safe
+
     return btoa(str)
-        .replace(/\+/g, '-') // Replace '+' with '-'
-        .replace(/\//g, '_') // Replace '/' with '_'
-        .replace(/=+$/, ''); // Remove trailing '='
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '');
 }
 
-// Combined function to generate the code challenge (async)
 async function generateCodeChallenge(verifier) {
     const hashed = await sha256(verifier);
     return base64urlencode(hashed);
 }
-// --- End PKCE Helpers ---
-
 
 function App() {
     const [accessToken, setAccessToken] = useState(null);
     const [profile, setProfile] = useState(null);
     const [playlists, setPlaylists] = useState(null);
     const [error, setError] = useState(null);
-    const [isLoading, setIsLoading] = useState(false); // For loading states
+    const [isLoading, setIsLoading] = useState(false);
 
     // --- Configuration ---
     const CLIENT_ID = import.meta.env.VITE_SPOTIFY_CLIENT_ID;
-    // Use the current window location as the redirect URI
-    // IMPORTANT: This exact URI MUST be registered in your Spotify Developer Dashboard
-    const REDIRECT_URI = window.location.origin + window.location.pathname;
+    const REDIRECT_URI = "https://music-guesser-now.vercel.app/";
     const AUTH_ENDPOINT = "https://accounts.spotify.com/authorize";
-    const RESPONSE_TYPE = "code"; // Required for PKCE flow
+    const RESPONSE_TYPE = "code";
 
     const SCOPES = [
         "user-read-email",
@@ -107,9 +97,9 @@ function App() {
                 response_type: RESPONSE_TYPE,
                 redirect_uri: REDIRECT_URI,
                 scope: SCOPES_URL_PARAM,
-                code_challenge_method: "S256", // Specify SHA-256 method
+                code_challenge_method: "S256",
                 code_challenge: codeChallenge,
-                // show_dialog: "true", // Optional: forces user to re-approve permissions
+                show_dialog: "true", // Optional: forces user to re-approve permissions
             });
 
             const authUrl = `${AUTH_ENDPOINT}?${params.toString()}`;
@@ -122,14 +112,12 @@ function App() {
         } catch (err) {
             console.error("PKCE generation or redirection failed:", err);
             setError("Login initiation failed. Please try again.");
-            sessionStorage.removeItem("spotify_code_verifier"); // Clean up on error
+            sessionStorage.removeItem("spotify_code_verifier");
             setIsLoading(false);
         }
     };
 
     // --- Logout ---
-    // Use useCallback to prevent this function from changing on every render,
-    // which could cause issues in useEffect dependencies.
     const handleLogout = useCallback(() => {
         console.log("Logging out...");
         setAccessToken(null);
@@ -137,10 +125,11 @@ function App() {
         setPlaylists(null);
         setError(null);
         setIsLoading(false);
-        setAuthToken(null); // Clear token in API module
+        setAuthToken(null);
+
         localStorage.removeItem("spotify_refresh_token");
-        sessionStorage.removeItem("spotify_code_verifier"); // Clean up verifier
-        // Clear any Spotify query params from URL (code, error)
+        sessionStorage.removeItem("spotify_code_verifier");
+
         window.history.replaceState({}, document.title, window.location.pathname);
         console.log("Logged out state cleared.");
     }, []);
@@ -153,7 +142,6 @@ function App() {
         const errorParam = urlParams.get("error");
         const storedRefreshToken = localStorage.getItem("spotify_refresh_token");
 
-        // Check if component is already processing something
         if (isLoading || accessToken) {
             return;
         }
@@ -169,7 +157,7 @@ function App() {
             if (!codeVerifier) {
                 console.error("Login Error: Code verifier missing from session storage.");
                 setError("Login Error: Could not verify request. Please try logging in again.");
-                handleLogout(); // Log out fully if verifier is lost
+                handleLogout();
                 return;
             }
 
@@ -181,22 +169,21 @@ function App() {
                 .then(tokenData => {
                     console.log("Successfully exchanged code for tokens:", tokenData);
                     setAccessToken(tokenData.access_token);
-                    setAuthToken(tokenData.access_token); // Set for future API calls
-                    // Store refresh token securely (localStorage is okay for this demo)
+                    setAuthToken(tokenData.access_token);
+
                     if (tokenData.refresh_token) {
                         localStorage.setItem("spotify_refresh_token", tokenData.refresh_token);
                         console.log("Refresh token stored.");
                     } else {
                         console.warn("No refresh token received in initial exchange.");
                     }
-                    sessionStorage.removeItem("spotify_code_verifier"); // Clean up used verifier
-                    // Data fetching will be triggered by Effect 2 due to accessToken change
+                    sessionStorage.removeItem("spotify_code_verifier");
                 })
                 .catch(err => {
                     console.error("Token Exchange Error:", err);
                     setError("Failed to get Spotify token. Please try logging in again.");
-                    sessionStorage.removeItem("spotify_code_verifier"); // Clean up verifier on error
-                    handleLogout(); // Log out fully on token exchange error
+                    sessionStorage.removeItem("spotify_code_verifier");
+                    handleLogout();
                 })
                 .finally(() => {
                      console.log("Token exchange process finished.");
@@ -238,8 +225,6 @@ function App() {
                      setIsLoading(false);
                  });
         }
-        // Only run this effect on initial mount or if dependencies like logout change
-        // It should NOT re-run when accessToken or isLoading changes internally.
     }, [handleLogout, CLIENT_ID, REDIRECT_URI, isLoading, accessToken]);
 
 
