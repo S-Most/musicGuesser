@@ -62,6 +62,7 @@ function App() {
 
         const hash = window.location.hash;
         if (!currentToken && hash) {
+            console.log("Hash received:", hash);
             const params = new URLSearchParams(hash.substring(1));
             const accessToken = params.get("code");
 
