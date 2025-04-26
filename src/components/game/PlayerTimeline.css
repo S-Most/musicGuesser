@@ -1,0 +1,29 @@
+.player-timeline {
+    display: grid;
+    padding: .5rem;
+    background: white;
+    color: black;
+    border-radius: .5rem;
+}
+
+.player-timeline h4 {
+
+}
+
+.timeline-entries-container {
+    width: min(100%, fit-content);
+    margin-inline: auto;
+}
+
+.timeline-entry {
+    display: grid;
+    grid-template-columns: 100px 1fr;
+}
+
+.timeline-info {
+    text-align: left;
+}
+
+.timeline-empty {
+
+}

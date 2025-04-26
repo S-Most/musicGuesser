@@ -1,0 +1,4 @@
+.timelines-container {
+    display: grid;
+    gap: 1rem;
+}
