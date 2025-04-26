@@ -8,7 +8,6 @@ import {
     pausePlayback,
 } from "./spotifyApi";
 import "./App.css";
-// Useless comment
 
 function App() {
     const [token, setToken] = useState(
@@ -19,7 +18,10 @@ function App() {
     const [error, setError] = useState(null);
 
     const CLIENT_ID = import.meta.env.VITE_SPOTIFY_CLIENT_ID;
+
     const REDIRECT_URI = "https://music-guesser-now.vercel.app/";
+    // const REDIRECT_URI = "http://127.0.0.1:5173";
+
     const AUTH_ENDPOINT = "https://accounts.spotify.com/authorize";
     const RESPONSE_TYPE = "code";
 
@@ -61,7 +63,7 @@ function App() {
         const hash = window.location.hash;
         if (!currentToken && hash) {
             const params = new URLSearchParams(hash.substring(1));
-            const accessToken = params.get("access_token");
+            const accessToken = params.get("code");
 
             if (accessToken) {
                 console.log(
