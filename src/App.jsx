@@ -4,14 +4,13 @@ import {
     setAuthToken,
     getAccessTokenFromCode,
     refreshAccessToken,
-    getUserProfile, // Keep for potential future use or display name
-    // getUserPlaylists, // GameContainer will fetch playlists now
+    getUserProfile,
 } from "./spotifyApi";
 
 import { generateRandomString, generateCodeChallenge } from "./utils/pkceUtils";
 
 import LoginScreen from "./components/LoginScreen";
-import GameContainer from "./components/GameContainer"; // Import the new GameContainer
+import GameContainer from "./components/GameContainer";
 
 import "./App.css";
 
@@ -21,7 +20,6 @@ function App() {
     const [error, setError] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
 
-    // --- Configuration ---
     const CLIENT_ID = import.meta.env.VITE_SPOTIFY_CLIENT_ID;
     const LOCAL_DEV_URI = "http://127.0.0.1:5173/";
     const PRODUCTION_URI = "https://music-guesser-now.vercel.app/";
@@ -34,14 +32,12 @@ function App() {
         "user-library-read",
         "user-read-playback-state",
         "user-modify-playback-state",
-        // "streaming" // Only if using Web Playback SDK directly
     ];
     const SCOPES_URL_PARAM = SCOPES.join(" ");
 
     const AUTH_ENDPOINT = "https://accounts.spotify.com/authorize";
     const RESPONSE_TYPE = "code";
 
-    // --- Authentication Logic (handleLogin remains largely the same) ---
     const handleLogin = useCallback(async () => {
         setError(null);
         setIsLoading(true);
@@ -78,7 +74,6 @@ function App() {
         }
     }, [CLIENT_ID, REDIRECT_URI, SCOPES_URL_PARAM]);
 
-    // --- Logout Handler (Remains the same) ---
     const handleLogout = useCallback(() => {
         console.log("Logging out...");
         setAccessToken(null);
@@ -93,7 +88,6 @@ function App() {
         window.history.replaceState({}, document.title, window.location.pathname);
     }, []);
 
-    // --- Effect 1: Handle Authentication Flow (Redirect & Refresh - Minor Adjustments) ---
     useEffect(() => {
         const urlParams = new URLSearchParams(window.location.search);
         const code = urlParams.get("code");
@@ -104,7 +98,6 @@ function App() {
             return;
         }
 
-        // Scenario 1: Redirect with code
         if (code) {
             console.log("Detected authorization code.");
             window.history.replaceState({}, document.title, window.location.pathname);
@@ -140,14 +133,12 @@ function App() {
                 })
                 .finally(() => setIsLoading(false));
 
-        // Scenario 2: Redirect with error
         } else if (errorParam) {
             console.error("Spotify login error:", errorParam);
             window.history.replaceState({}, document.title, window.location.pathname);
             setError(`Spotify Login Error: ${errorParam}. Please try again.`);
             handleLogout();
 
-        // Scenario 3: Refresh token on load
         } else if (storedRefreshToken && !accessToken) {
             console.log("Attempting token refresh on load...");
             setIsLoading(true);
@@ -176,7 +167,6 @@ function App() {
     }, [handleLogout, CLIENT_ID, REDIRECT_URI, accessToken, isLoading]);
 
 
-    // --- Render Logic ---
     return (
         <div className="App">
             <header className="App-header">

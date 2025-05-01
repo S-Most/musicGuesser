@@ -1,6 +1,5 @@
-/* eslint-disable no-useless-escape */
 import React, { useMemo } from "react";
-import { parseRange } from "../../utils/gameUtils";
+import { parseRange, compareWithTolerance } from "../../utils/gameUtils";
 
 const REPLAY_PENALTY = 1;
 
@@ -19,35 +18,43 @@ function FeedbackDialog({
         const { guessTitle, guessArtist, selectedRangeValue, playCount } =
             guessData;
 
-        const correctTitleLower = currentSong.title.toLowerCase();
-        const correctArtistLower = currentSong.artist.toLowerCase();
         const correctYear = currentSong.year;
-        const formatString = (str) =>
-            str
-                .toLowerCase()
-                .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()']/g, "")
-                .replace(/\s+/g, " ")
-                .trim();
-
-        const isTitleCorrect =
-            formatString(guessTitle) === formatString(correctTitleLower);
-        const isArtistCorrect =
-            formatString(guessArtist) === formatString(correctArtistLower);
         const { start: rangeStart, end: rangeEnd } = parseRange(
             selectedRangeValue || "",
         );
+
         const isPlacementCorrect =
             correctYear >= rangeStart && correctYear <= rangeEnd;
-        const wasReplayed = playCount > 1;
+
+        const isTitleCorrect = compareWithTolerance(
+            guessTitle,
+            currentSong.title,
+        );
+        const isArtistCorrect = compareWithTolerance(
+            guessArtist,
+            currentSong.artist,
+        );
 
         const isPerfectGuess =
             isTitleCorrect && isArtistCorrect && isPlacementCorrect;
+
+        let turnScore = 0;
+        if (isPlacementCorrect) turnScore += 1;
+        if (isTitleCorrect) turnScore += 1;
+        if (isArtistCorrect) turnScore += 1;
+        turnScore -= Math.max((guessData.playCount - 1), 0) * REPLAY_PENALTY;
+        if (turnScore < 0) turnScore = 0;
+        if (isPerfectGuess) turnScore = 5;
+
+        const wasReplayed = playCount > 1;
+
         const overallType =
             (isTitleCorrect && isArtistCorrect) || isPlacementCorrect
                 ? "correct"
                 : "incorrect";
-        const penaltyApplied =
-            isPerfectGuess && wasReplayed ? REPLAY_PENALTY : 0;
+        const penaltyApplied = wasReplayed
+            ? parseInt(playCount, 10) * REPLAY_PENALTY
+            : 0;
 
         return {
             type: overallType,
@@ -62,6 +69,7 @@ function FeedbackDialog({
                 placement: isPlacementCorrect,
             },
             timeline: timelineStatus || { cardAdded: false, wasFull: false },
+            turnScore: turnScore,
             penalty: penaltyApplied,
         };
     }, [isOpen, currentSong, guessData, timelineStatus]);
@@ -103,23 +111,10 @@ function FeedbackDialog({
                             </strong>{" "}
                             ({feedbackDetails.songDetails.year})
                         </p>
-
-                        <p className="feedback-guess-summary">
-                            {feedbackDetails.penalty > 0 && (
-                                <span className="feedback-penalty">
-                                    {" "}
-                                    (-{feedbackDetails.penalty}pt for replay on
-                                    perfect guess)
-                                </span>
-                            )}
-                        </p>
-                        {feedbackDetails.timeline.cardAdded && (
-                            <p className="feedback-timeline-update timeline-added">
-                                Song added to your timeline!
-                            </p>
-                        )}
                     </div>
                 </div>
+
+                <hr />
 
                 <table className="feedback-accuracy-table">
                     <tbody>
@@ -149,22 +144,25 @@ function FeedbackDialog({
                     </tbody>
                 </table>
 
-                <form
-                    method="dialog"
-                    className="dialog-actions"
-                    onSubmit={(e) => {
-                        e.preventDefault();
-                        onClose();
-                    }}
-                >
-                    <button
-                        className="dialog-confirm-button"
-                        value="confirm"
-                        type="submit"
-                    >
-                        Continue
-                    </button>
-                </form>
+                <hr />
+                <p className="feedback-guess-summary">
+                    <span className="feedback-points">
+                        Points awarded: {feedbackDetails.turnScore}
+                    </span>
+
+                    {feedbackDetails.penalty > 0 && (
+                        <span className="feedback-penalty">
+                            {` (-${feedbackDetails.penalty}pt for replay)`}
+                        </span>
+                    )}
+                </p>
+
+                <hr />
+                {feedbackDetails.accuracy.placement && (
+                    <p className="feedback-timeline-update timeline-added">
+                        Song added to your timeline!
+                    </p>
+                )}
             </div>
         </div>
     );

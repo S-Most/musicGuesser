@@ -1,12 +1,16 @@
-/* eslint-disable no-useless-escape */
 import React, { useState, useEffect, useCallback } from "react";
 import SetupScreen from "./game/SetupScreen";
 import GameScreen from "./game/GameScreen";
 import TimelinesDisplay from "./game/TimelinesDisplay";
 import GameOverScreen from "./game/GameOverScreen";
-import FeedbackDialog from "./game/FeedbackDialog"; // Import FeedbackDialog here
 import { getUserPlaylists, getPlaylistItems } from "../spotifyApi";
-import { shuffleArray, parseRange, generateOptions } from "../utils/gameUtils";
+
+import {
+    shuffleArray,
+    parseRange,
+    generateOptions,
+    compareWithTolerance,
+} from "../utils/gameUtils";
 
 const MAX_PLAYERS = 4;
 const MAX_TIMELINE_LENGTH = 10;
@@ -20,13 +24,12 @@ function GameContainer({ onLogout }) {
     const [userPlaylists, setUserPlaylists] = useState({ items: [], total: 0 });
     const [selectedPlaylistId, setSelectedPlaylistId] = useState("");
     const [currentPlaylistDeck, setCurrentPlaylistDeck] = useState([]);
-    const [currentSong, setCurrentSong] = useState(null); // Song for the current turn
+    const [currentSong, setCurrentSong] = useState(null);
     const [placementOptions, setPlacementOptions] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
 
-    // State to hold data needed for the feedback dialog
-    const [feedbackTriggerData, setFeedbackTriggerData] = useState(null); // { currentSong, guessData, timelineStatus }
+    const [feedbackTriggerData, setFeedbackTriggerData] = useState(null);
 
     useEffect(() => {
         const fetchPlaylists = async () => {
@@ -96,7 +99,7 @@ function GameContainer({ onLogout }) {
                 title: t.name,
                 artist: t.artists?.[0]?.name || "Unknown",
                 year: parseInt(t.album.release_date.substring(0, 4), 10),
-                albumArt: t.album.images?.[0]?.url,
+                // albumArt: t.album.images?.[0]?.url,
                 uri: t.uri,
             }))
             .filter((t) => !isNaN(t.year));
@@ -112,7 +115,7 @@ function GameContainer({ onLogout }) {
         }
         setIsLoading(true);
         setError(null);
-        setFeedbackTriggerData(null); // Clear any old feedback
+        setFeedbackTriggerData(null);
         try {
             let allTracks = [],
                 offset = 0,
@@ -165,16 +168,14 @@ function GameContainer({ onLogout }) {
         }
     }, [players, selectedPlaylistId, onLogout]);
 
-    // Effect to set current song for the turn
     useEffect(() => {
         if (gameState === "playing" && currentPlaylistDeck.length > 0) {
             const song = currentPlaylistDeck[currentSongIndex];
             const player = players[currentPlayerIndex];
             if (song && player) {
-                setCurrentSong(song); // Set the song for GameScreen to use
+                setCurrentSong(song);
                 setPlacementOptions(generateOptions(player.timeline));
             } else {
-                // This case should ideally be caught by game over logic
                 console.warn(
                     "Attempted to set song/player when state is invalid or game might be over.",
                 );
@@ -188,10 +189,9 @@ function GameContainer({ onLogout }) {
         players,
     ]);
 
-    // Function called AFTER feedback dialog is closed in GameScreen
     const handleAdvanceTurn = useCallback(() => {
-        setIsLoading(false); // Turn off loading indicator
-        setFeedbackTriggerData(null); // Clear the trigger data
+        setIsLoading(false);
+        setFeedbackTriggerData(null);
 
         const nextPlayerIndex = (currentPlayerIndex + 1) % players.length;
         const nextSongIndex = currentSongIndex + 1;
@@ -201,13 +201,11 @@ function GameContainer({ onLogout }) {
             players.some((p) => p.timeline.length >= MAX_TIMELINE_LENGTH);
 
         if (isGameOver) {
-            console.log("Game over.");
             setGameState("gameover");
-            setCurrentSong(null); // Clear song for game over screen
+            setCurrentSong(null);
         } else {
             setCurrentPlayerIndex(nextPlayerIndex);
             setCurrentSongIndex(nextSongIndex);
-            // The useEffect above will set the new currentSong based on these indices
         }
     }, [
         currentPlayerIndex,
@@ -216,41 +214,40 @@ function GameContainer({ onLogout }) {
         currentPlaylistDeck.length,
     ]);
 
-    // Function called by GameScreen when guess is submitted
-    // Calculates score, updates player state, and sets data to trigger feedback dialog
     const handleGuessSubmit = useCallback(
         (guessData) => {
-            // guessData: { guessedTitle, guessedArtist, selectedRangeValue, playCount }
-            if (!currentSong) return; // Should not happen in playing state
+            if (!currentSong) return;
 
-            setIsLoading(true); // Indicate processing
+            setIsLoading(true);
 
-            // --- Calculations (Simplified logic from previous step, as logic moved to Dialog) ---
             const correctYear = currentSong.year;
             const { start: rangeStart, end: rangeEnd } = parseRange(
                 guessData.selectedRangeValue || "",
             );
+
             const isPlacementCorrect =
                 correctYear >= rangeStart && correctYear <= rangeEnd;
-            const isTitleCorrect =
-                formatString(guessData.guessedTitle) ===
-                formatString(currentSong.title);
-            const isArtistCorrect =
-                formatString(guessData.guessedArtist) ===
-                formatString(currentSong.artist);
-            const wasReplayed = guessData.playCount > 1;
+
+            const isTitleCorrect = compareWithTolerance(
+                guessData.guessTitle,
+                currentSong.title,
+            );
+            const isArtistCorrect = compareWithTolerance(
+                guessData.guessArtist,
+                currentSong.artist,
+            );
+
             const isPerfectGuess =
                 isTitleCorrect && isArtistCorrect && isPlacementCorrect;
 
-            // --- Score Calculation ---
             let turnScore = 0;
-            if (isPerfectGuess) turnScore = 3;
-            else if (isTitleCorrect && isArtistCorrect) turnScore = 1;
-            else if (isPlacementCorrect) turnScore = 1; // Score for placement even if ID wrong
-            if (isPerfectGuess && wasReplayed)
-                turnScore = Math.max(0, turnScore - REPLAY_PENALTY);
+            if (isPlacementCorrect) turnScore += 1;
+            if (isTitleCorrect) turnScore += 1;
+            if (isArtistCorrect) turnScore += 1;
+            turnScore -= Math.max((guessData.playCount - 1), 0) * REPLAY_PENALTY;
+            if (turnScore < 0) turnScore = 0;
+            if (isPerfectGuess) turnScore = 5;
 
-            // --- Update Player State and determine timeline status ---
             let cardAdded = false;
             let wasFull = false;
             setPlayers((prevPlayers) => {
@@ -258,7 +255,6 @@ function GameContainer({ onLogout }) {
                 const playerToUpdate = { ...newPlayers[currentPlayerIndex] };
                 playerToUpdate.score += turnScore;
 
-                // Only add card if placement was correct
                 if (isPlacementCorrect) {
                     if (playerToUpdate.timeline.length < MAX_TIMELINE_LENGTH) {
                         playerToUpdate.timeline = [
@@ -274,27 +270,15 @@ function GameContainer({ onLogout }) {
                 return newPlayers;
             });
 
-            // --- Set data to trigger the feedback dialog in GameScreen ---
             setFeedbackTriggerData({
-                currentSong: currentSong, // The song that was just guessed
-                guessData: guessData, // The player's actual guess input
-                timelineStatus: { cardAdded, wasFull }, // Status of the timeline update
+                currentSong: currentSong,
+                guessData: guessData,
+                timelineStatus: { cardAdded, wasFull },
+                turnScore: turnScore,
             });
-
-            // isLoading remains true until handleAdvanceTurn is called after dialog closure
         },
-        [currentSong, currentPlayerIndex, players],
+        [currentSong, currentPlayerIndex],
     );
-
-    // Helper for string formatting (needed for score calculation)
-    const formatString = (str) =>
-        str
-            ? str
-                  .toLowerCase()
-                  .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()']/g, "")
-                  .replace(/\s+/g, " ")
-                  .trim()
-            : "";
 
     const handlePlayAgain = useCallback(() => {
         setPlayers([]);
@@ -337,12 +321,12 @@ function GameContainer({ onLogout }) {
                     <>
                         <GameScreen
                             currentPlayer={players[currentPlayerIndex]}
-                            currentSong={currentSong} // Pass song for the current turn
+                            currentSong={currentSong}
                             placementOptions={placementOptions}
-                            onSubmitGuess={handleGuessSubmit} // Pass guess processor
-                            isLoading={isLoading} // Pass loading state
-                            onAdvanceTurn={handleAdvanceTurn} // Pass turn advancer
-                            feedbackTriggerData={feedbackTriggerData} // Pass data to trigger dialog
+                            onSubmitGuess={handleGuessSubmit}
+                            isLoading={isLoading}
+                            onAdvanceTurn={handleAdvanceTurn}
+                            feedbackTriggerData={feedbackTriggerData}
                         />
                         <TimelinesDisplay players={players} />
                     </>
@@ -383,7 +367,6 @@ function GameContainer({ onLogout }) {
                 </p>
             )}
             {renderGameState()}
-            {/* FeedbackDialog is now rendered *within* GameScreen */}
         </div>
     );
 }

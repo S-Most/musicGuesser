@@ -512,6 +512,21 @@ label {
     background-color: #1ed760;
 }
 
+.timeline-added {
+    margin-top: 2rem;
+    font-style: italic;
+    font-weight: 900;
+}
+
+.feedback-penalty {
+    font-style: italic;
+    font-size: 0.8em;
+}
+
+hr {
+    width: 80%;
+}
+
 @media (max-width: 600px) {
     .dialog-box {
         width: 92%;
