@@ -4,6 +4,7 @@ import SetupScreen from "./game/SetupScreen";
 import GameScreen from "./game/GameScreen";
 import TimelinesDisplay from "./game/TimelinesDisplay";
 import GameOverScreen from "./game/GameOverScreen";
+import FeedbackDialog from "./game/FeedbackDialog"; // Import FeedbackDialog here
 import { getUserPlaylists, getPlaylistItems } from "../spotifyApi";
 import { shuffleArray, parseRange, generateOptions } from "../utils/gameUtils";
 
@@ -19,10 +20,13 @@ function GameContainer({ onLogout }) {
     const [userPlaylists, setUserPlaylists] = useState({ items: [], total: 0 });
     const [selectedPlaylistId, setSelectedPlaylistId] = useState("");
     const [currentPlaylistDeck, setCurrentPlaylistDeck] = useState([]);
-    const [currentSong, setCurrentSong] = useState(null);
+    const [currentSong, setCurrentSong] = useState(null); // Song for the current turn
     const [placementOptions, setPlacementOptions] = useState([]);
-    const [isLoading, setIsLoading] = useState(false); // Controls loading for guess processing & game start
+    const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
+
+    // State to hold data needed for the feedback dialog
+    const [feedbackTriggerData, setFeedbackTriggerData] = useState(null); // { currentSong, guessData, timelineStatus }
 
     useEffect(() => {
         const fetchPlaylists = async () => {
@@ -31,10 +35,8 @@ function GameContainer({ onLogout }) {
                 const playlistsData = await getUserPlaylists(50);
                 setUserPlaylists(playlistsData);
             } catch (err) {
-                console.error("Failed to fetch playlists:", err);
-                setError(
-                    "Could not load your playlists. Please try refreshing.",
-                );
+                console.error("Playlist fetch failed:", err);
+                setError("Could not load playlists.");
                 if (err.response?.status === 401) onLogout();
             }
         };
@@ -44,7 +46,7 @@ function GameContainer({ onLogout }) {
     const handleAddPlayer = useCallback(
         (name) => {
             if (players.length >= MAX_PLAYERS) {
-                setError(`Maximum ${MAX_PLAYERS} players allowed.`);
+                setError(`Max ${MAX_PLAYERS} players.`);
                 setTimeout(() => setError(null), 3000);
                 return;
             }
@@ -59,8 +61,8 @@ function GameContainer({ onLogout }) {
                         (p) =>
                             p.name.toLowerCase() === name.trim().toLowerCase(),
                     )
-                        ? "Player name already exists."
-                        : "Please enter a valid player name.",
+                        ? "Name exists."
+                        : "Invalid name.",
                 );
                 setTimeout(() => setError(null), 3000);
                 return;
@@ -81,94 +83,81 @@ function GameContainer({ onLogout }) {
 
     const processTracks = (items) => {
         if (!items || items.length === 0) return [];
-        const tracksOnly = items.map((item) => item.track).filter(Boolean);
-        const filteredForData = tracksOnly.filter((track) => {
-            const hasReleaseDate = !!track?.album?.release_date;
-            const hasUri = !!track?.uri;
-            const isValidFormat = /^\d{4}(-\d{2}(-\d{2})?)?$/.test(
-                track?.album?.release_date,
-            );
-            return hasReleaseDate && hasUri && isValidFormat;
-        });
-        const mappedToGameFormat = filteredForData.map((track) => {
-            const yearString = track.album.release_date.substring(0, 4);
-            const year = parseInt(yearString, 10);
-            return {
-                id: track.id,
-                title: track.name,
-                artist: track.artists?.[0]?.name || "Unknown Artist",
-                year: year,
-                albumArt: track.album.images?.[0]?.url,
-                uri: track.uri,
-            };
-        });
-        return mappedToGameFormat.filter((track) => !isNaN(track.year));
+        const tracks = items.map((item) => item.track).filter(Boolean);
+        const validTracks = tracks.filter(
+            (t) =>
+                t?.album?.release_date &&
+                t?.uri &&
+                /^\d{4}(-\d{2}(-\d{2})?)?$/.test(t.album.release_date),
+        );
+        return validTracks
+            .map((t) => ({
+                id: t.id,
+                title: t.name,
+                artist: t.artists?.[0]?.name || "Unknown",
+                year: parseInt(t.album.release_date.substring(0, 4), 10),
+                albumArt: t.album.images?.[0]?.url,
+                uri: t.uri,
+            }))
+            .filter((t) => !isNaN(t.year));
     };
 
     const handleStartGame = useCallback(async () => {
-        if (players.length === 0) {
-            setError("Add at least one player.");
-            setTimeout(() => setError(null), 3000);
-            return;
-        }
-        if (!selectedPlaylistId) {
-            setError("Select a playlist.");
+        if (players.length === 0 || !selectedPlaylistId) {
+            setError(
+                players.length === 0 ? "Add players." : "Select playlist.",
+            );
             setTimeout(() => setError(null), 3000);
             return;
         }
         setIsLoading(true);
         setError(null);
+        setFeedbackTriggerData(null); // Clear any old feedback
         try {
-            let allTracks = [];
-            let offset = 0;
-            const limit = 50;
-            let totalFetched = 0;
-            let playlistTotal = 0;
+            let allTracks = [],
+                offset = 0,
+                limit = 50,
+                totalFetched = 0,
+                playlistTotal = 0;
             do {
-                const playlistData = await getPlaylistItems(
+                const data = await getPlaylistItems(
                     selectedPlaylistId,
                     limit,
                     offset,
                 );
-                if (!playlistData || !playlistData.items) {
+                if (!data || !data.items) {
                     if (offset === 0)
-                        throw new Error("Playlist empty/fetch failed.");
+                        throw new Error("Playlist empty/fetch fail.");
                     else break;
                 }
-                playlistTotal = playlistData.total;
-                const processed = processTracks(playlistData.items);
-                allTracks = allTracks.concat(processed);
-                offset += playlistData.items.length;
-                totalFetched += playlistData.items.length;
-                if (
-                    playlistData.items.length === 0 &&
-                    totalFetched < playlistTotal
-                )
+                playlistTotal = data.total;
+                allTracks = allTracks.concat(processTracks(data.items));
+                offset += data.items.length;
+                totalFetched += data.items.length;
+                if (data.items.length === 0 && totalFetched < playlistTotal)
                     break;
                 if (totalFetched >= 500) break;
             } while (totalFetched < playlistTotal);
-
-            if (allTracks.length < players.length + 1) {
+            if (allTracks.length < players.length + 1)
                 throw new Error(
-                    `Not enough playable tracks (${
-                        allTracks.length
-                    }) found. Min ${players.length + 1} required.`,
+                    `Not enough valid tracks (${allTracks.length}). Min ${
+                        players.length + 1
+                    } needed.`,
                 );
-            }
-            const shuffledTracks = shuffleArray(allTracks);
-            const initialPlayers = players.map((player) => ({
-                ...player,
+            const deck = shuffleArray(allTracks);
+            const initialPlayers = players.map((p) => ({
+                ...p,
                 score: 0,
-                timeline: [shuffledTracks.pop()],
+                timeline: [deck.pop()],
             }));
             setPlayers(initialPlayers);
-            setCurrentPlaylistDeck(shuffledTracks);
+            setCurrentPlaylistDeck(deck);
             setCurrentSongIndex(0);
             setCurrentPlayerIndex(0);
             setGameState("playing");
         } catch (err) {
-            console.error("Failed to start game:", err);
-            setError(`Failed to start: ${err.message}`);
+            console.error("Start game failed:", err);
+            setError(`Start failed: ${err.message}`);
             setGameState("setup");
             if (err.response?.status === 401) onLogout();
         } finally {
@@ -176,23 +165,19 @@ function GameContainer({ onLogout }) {
         }
     }, [players, selectedPlaylistId, onLogout]);
 
+    // Effect to set current song for the turn
     useEffect(() => {
         if (gameState === "playing" && currentPlaylistDeck.length > 0) {
-            const isGameOver =
-                currentSongIndex >= currentPlaylistDeck.length ||
-                players.some((p) => p.timeline.length >= MAX_TIMELINE_LENGTH);
-            if (isGameOver) {
-                return;
-            }
             const song = currentPlaylistDeck[currentSongIndex];
-            const currentPlayer = players[currentPlayerIndex];
-            if (song && currentPlayer) {
-                setCurrentSong(song);
-                setPlacementOptions(generateOptions(currentPlayer.timeline));
-            } else if (!isGameOver) {
-                console.error("Error setting current song/player state.");
-                setError("Turn setup error. Returning to setup.");
-                setGameState("setup");
+            const player = players[currentPlayerIndex];
+            if (song && player) {
+                setCurrentSong(song); // Set the song for GameScreen to use
+                setPlacementOptions(generateOptions(player.timeline));
+            } else {
+                // This case should ideally be caught by game over logic
+                console.warn(
+                    "Attempted to set song/player when state is invalid or game might be over.",
+                );
             }
         }
     }, [
@@ -203,9 +188,11 @@ function GameContainer({ onLogout }) {
         players,
     ]);
 
-
+    // Function called AFTER feedback dialog is closed in GameScreen
     const handleAdvanceTurn = useCallback(() => {
-        setIsLoading(false);
+        setIsLoading(false); // Turn off loading indicator
+        setFeedbackTriggerData(null); // Clear the trigger data
+
         const nextPlayerIndex = (currentPlayerIndex + 1) % players.length;
         const nextSongIndex = currentSongIndex + 1;
 
@@ -214,12 +201,13 @@ function GameContainer({ onLogout }) {
             players.some((p) => p.timeline.length >= MAX_TIMELINE_LENGTH);
 
         if (isGameOver) {
-            console.log("Game over condition met on turn advance.");
+            console.log("Game over.");
             setGameState("gameover");
-            setCurrentSong(null);
+            setCurrentSong(null); // Clear song for game over screen
         } else {
             setCurrentPlayerIndex(nextPlayerIndex);
             setCurrentSongIndex(nextSongIndex);
+            // The useEffect above will set the new currentSong based on these indices
         }
     }, [
         currentPlayerIndex,
@@ -228,102 +216,85 @@ function GameContainer({ onLogout }) {
         currentPlaylistDeck.length,
     ]);
 
-
+    // Function called by GameScreen when guess is submitted
+    // Calculates score, updates player state, and sets data to trigger feedback dialog
     const handleGuessSubmit = useCallback(
-        async (guessData) => {
-            setIsLoading(true);
+        (guessData) => {
+            // guessData: { guessedTitle, guessedArtist, selectedRangeValue, playCount }
+            if (!currentSong) return; // Should not happen in playing state
 
-            const {
-                guessTitle,
-                guessArtist,
-                selectedRangeValue,
-                playCount,
-            } = guessData;
+            setIsLoading(true); // Indicate processing
 
-            if (!currentSong) {
-                setIsLoading(false);
-                return null;
-            }
-
-            const correctTitleLower = currentSong.title.toLowerCase();
-            const correctArtistLower = currentSong.artist.toLowerCase();
+            // --- Calculations (Simplified logic from previous step, as logic moved to Dialog) ---
             const correctYear = currentSong.year;
-            const formatString = (str) =>
-                str
-                    .toLowerCase()
-                    .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()']/g, "")
-                    .replace(/\s+/g, " ")
-                    .trim();
-            const isTitleCorrect =
-                formatString(guessTitle) === formatString(correctTitleLower);
-            const isArtistCorrect =
-                formatString(guessArtist) ===
-                formatString(correctArtistLower);
-            const { start: rangeStart, end: rangeEnd } =
-                parseRange(selectedRangeValue);
-            const isYearCorrectlyPlaced =
+            const { start: rangeStart, end: rangeEnd } = parseRange(
+                guessData.selectedRangeValue || "",
+            );
+            const isPlacementCorrect =
                 correctYear >= rangeStart && correctYear <= rangeEnd;
+            const isTitleCorrect =
+                formatString(guessData.guessedTitle) ===
+                formatString(currentSong.title);
+            const isArtistCorrect =
+                formatString(guessData.guessedArtist) ===
+                formatString(currentSong.artist);
+            const wasReplayed = guessData.playCount > 1;
+            const isPerfectGuess =
+                isTitleCorrect && isArtistCorrect && isPlacementCorrect;
+
+            // --- Score Calculation ---
             let turnScore = 0;
-            let feedbackText = `The song was: ${currentSong.title} by ${currentSong.artist} (${currentSong.year}). `;
-            let feedbackType = "incorrect";
-            let correctPlacement = false;
-            const wasReplayed = playCount > 1;
+            if (isPerfectGuess) turnScore = 3;
+            else if (isTitleCorrect && isArtistCorrect) turnScore = 1;
+            else if (isPlacementCorrect) turnScore = 1; // Score for placement even if ID wrong
+            if (isPerfectGuess && wasReplayed)
+                turnScore = Math.max(0, turnScore - REPLAY_PENALTY);
 
-            if (isTitleCorrect && isArtistCorrect && isYearCorrectlyPlaced) {
-                feedbackText += "Perfect guess & placement!";
-                feedbackType = "correct";
-                turnScore = 3;
-                correctPlacement = true;
-                if (wasReplayed) {
-                    turnScore = Math.max(0, turnScore - REPLAY_PENALTY);
-                    feedbackText += ` (-${REPLAY_PENALTY}pt for replay)`;
-                }
-            } else if (
-                isTitleCorrect &&
-                isArtistCorrect &&
-                !isYearCorrectlyPlaced
-            ) {
-                feedbackText += `Correct song, wrong placement. Year ${correctYear} not in '${selectedRangeValue}'.`;
-                turnScore = 1;
-            } else if (
-                !isTitleCorrect &&
-                !isArtistCorrect &&
-                isYearCorrectlyPlaced
-            ) {
-                feedbackText += `Incorrect song, but correct placement range!`;
-                turnScore = 1;
-                correctPlacement = true;
-            } else {
-                feedbackText += "Incorrect song & placement.";
-                turnScore = 0;
-            }
-            turnScore = Math.max(0, turnScore);
-
-            let playerTimelineFull = false;
+            // --- Update Player State and determine timeline status ---
+            let cardAdded = false;
+            let wasFull = false;
             setPlayers((prevPlayers) => {
                 const newPlayers = [...prevPlayers];
                 const playerToUpdate = { ...newPlayers[currentPlayerIndex] };
                 playerToUpdate.score += turnScore;
-                if (correctPlacement) {
+
+                // Only add card if placement was correct
+                if (isPlacementCorrect) {
                     if (playerToUpdate.timeline.length < MAX_TIMELINE_LENGTH) {
                         playerToUpdate.timeline = [
                             ...playerToUpdate.timeline,
                             currentSong,
                         ].sort((a, b) => a.year - b.year);
+                        cardAdded = true;
                     } else {
-                        playerTimelineFull = true;
+                        wasFull = true;
                     }
                 }
                 newPlayers[currentPlayerIndex] = playerToUpdate;
                 return newPlayers;
             });
-            if (playerTimelineFull && correctPlacement)
-                feedbackText += " (Timeline full, card not added)";
 
-            return { message: feedbackText, type: feedbackType };
+            // --- Set data to trigger the feedback dialog in GameScreen ---
+            setFeedbackTriggerData({
+                currentSong: currentSong, // The song that was just guessed
+                guessData: guessData, // The player's actual guess input
+                timelineStatus: { cardAdded, wasFull }, // Status of the timeline update
+            });
+
+            // isLoading remains true until handleAdvanceTurn is called after dialog closure
         },
-        [currentSong, currentPlayerIndex, players, currentPlaylistDeck], // Removed length dependency as deck doesn't change mid-game
+        [currentSong, currentPlayerIndex, players],
     );
+
+    // Helper for string formatting (needed for score calculation)
+    const formatString = (str) =>
+        str
+            ? str
+                  .toLowerCase()
+                  .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()']/g, "")
+                  .replace(/\s+/g, " ")
+                  .trim()
+            : "";
 
     const handlePlayAgain = useCallback(() => {
         setPlayers([]);
@@ -335,6 +306,7 @@ function GameContainer({ onLogout }) {
         setError(null);
         setGameState("setup");
         setIsLoading(false);
+        setFeedbackTriggerData(null);
     }, []);
 
     const renderGameState = () => {
@@ -365,11 +337,12 @@ function GameContainer({ onLogout }) {
                     <>
                         <GameScreen
                             currentPlayer={players[currentPlayerIndex]}
-                            currentSong={currentSong}
+                            currentSong={currentSong} // Pass song for the current turn
                             placementOptions={placementOptions}
-                            onSubmitGuess={handleGuessSubmit}
-                            isLoading={isLoading}
-                            onAdvanceTurn={handleAdvanceTurn}
+                            onSubmitGuess={handleGuessSubmit} // Pass guess processor
+                            isLoading={isLoading} // Pass loading state
+                            onAdvanceTurn={handleAdvanceTurn} // Pass turn advancer
+                            feedbackTriggerData={feedbackTriggerData} // Pass data to trigger dialog
                         />
                         <TimelinesDisplay players={players} />
                     </>
@@ -382,7 +355,7 @@ function GameContainer({ onLogout }) {
                     />
                 );
             default:
-                return <p>Unexpected error. Try logging out.</p>;
+                return <p>Unexpected error.</p>;
         }
     };
 
@@ -410,6 +383,7 @@ function GameContainer({ onLogout }) {
                 </p>
             )}
             {renderGameState()}
+            {/* FeedbackDialog is now rendered *within* GameScreen */}
         </div>
     );
 }
